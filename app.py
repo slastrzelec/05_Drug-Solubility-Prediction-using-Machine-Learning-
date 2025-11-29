@@ -3,7 +3,16 @@ import pickle
 import numpy as np
 import pandas as pd
 from rdkit import Chem
-from rdkit.Chem import AllChem, Draw
+from rdkit.Chem import AllChem
+
+# Try to import Draw, fallback if it fails
+try:
+    from rdkit.Chem import Draw
+    HAS_DRAW = True
+except ImportError:
+    HAS_DRAW = False
+    st.warning("⚠️ Molecular structure visualization not available on this platform")
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -116,8 +125,14 @@ with tab1:
             # Molecule visualization
             with col1:
                 st.subheader("Structure")
-                img = Draw.MolToImage(result['mol'], size=(300, 300))
-                st.image(img, use_container_width=True)
+                if HAS_DRAW:
+                    try:
+                        img = Draw.MolToImage(result['mol'], size=(300, 300))
+                        st.image(img, use_container_width=True)
+                    except:
+                        st.info("📝 SMILES: " + smiles_input)
+                else:
+                    st.info("📝 SMILES:\n" + smiles_input)
             
             # Prediction results
             with col2:
@@ -172,7 +187,6 @@ with tab2:
             category, _, _ = categorize_solubility(result['log_solubility'])
             predictions_data.append({
                 "Drug": drug_name,
-                "SMILES": smiles,
                 "log(solubility)": f"{result['log_solubility']:.3f}",
                 "Actual Solubility (mol/L)": f"{result['actual_solubility']:.2e}",
                 "Category": category
@@ -182,13 +196,17 @@ with tab2:
     st.dataframe(df_examples, use_container_width=True, hide_index=True)
     
     # Visualize molecules
-    st.subheader("Molecular Structures")
-    mols = [Chem.MolFromSmiles(smiles) for smiles in examples.values()]
-    legends = [f"{name}\n({examples[name][:20]}...)" for name in examples.keys()]
-    
-    img = Draw.MolsToGridImage(mols, molsPerRow=3, subImgSize=(250, 250), 
-                               legends=list(examples.keys()), returnPNG=False)
-    st.image(img, use_container_width=True)
+    if HAS_DRAW:
+        st.subheader("Molecular Structures")
+        try:
+            mols = [Chem.MolFromSmiles(smiles) for smiles in examples.values()]
+            img = Draw.MolsToGridImage(mols, molsPerRow=3, subImgSize=(250, 250), 
+                                       legends=list(examples.keys()), returnPNG=False)
+            st.image(img, use_container_width=True)
+        except:
+            st.info("📝 Structure visualization unavailable, but predictions are available above!")
+    else:
+        st.info("📝 Molecular structure visualization not available, but predictions are ready above!")
 
 # TAB 3: About Model
 with tab3:
