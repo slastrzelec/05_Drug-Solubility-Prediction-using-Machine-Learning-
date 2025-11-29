@@ -1,5 +1,4 @@
 import streamlit as st
-import pickle
 import joblib
 import numpy as np
 import pandas as pd
@@ -12,7 +11,6 @@ try:
     HAS_DRAW = True
 except ImportError:
     HAS_DRAW = False
-    st.warning("⚠️ Molecular structure visualization not available on this platform")
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -42,44 +40,24 @@ st.markdown("""
 def load_model():
     import os
     
-    st.write("🔍 Searching for model files...")
-    st.write(f"Current directory: {os.getcwd()}")
-    st.write(f"Files in directory: {os.listdir('.')}")
-    
     try:
-        st.write("Loading model...")
-        with open('drug_solubility_model.pkl', 'rb') as f:
-            model = pickle.load(f)
-        
-        st.write("Loading scaler...")
-        with open('scaler.pkl', 'rb') as f:
-            scaler = pickle.load(f)
-        
-        st.success("✅ Model and scaler loaded successfully!")
-        return model, scaler
-        
-    except FileNotFoundError as e:
-        st.error(f"""
-        ⚠️ Model files not found: {str(e)}
-        
-        **Fix:**
-        1. Make sure these files are in your GitHub repo:
-           - `drug_solubility_model.pkl`
-           - `scaler.pkl`
-        
-        2. If they're too large (>100MB), use Git LFS:
-           ```bash
-           git lfs install
-           git lfs track "*.pkl"
-           git add .gitattributes
-           git add drug_solubility_model.pkl scaler.pkl
-           git commit -m "Add model files with Git LFS"
-           git push origin main
-           ```
-        
-        3. Restart the app after pushing
-        """)
-        return None, None
+        # Try joblib first (more stable on Streamlit Cloud)
+        if os.path.exists('drug_solubility_model.joblib'):
+            model = joblib.load('drug_solubility_model.joblib')
+            scaler = joblib.load('scaler.joblib')
+            return model, scaler
+        else:
+            st.error("""
+            ⚠️ Model files not found!
+            
+            **What to do:**
+            1. Ensure these files are in your GitHub repo:
+               - `drug_solubility_model.joblib`
+               - `scaler.joblib`
+            2. Push changes to GitHub
+            3. Restart this app
+            """)
+            return None, None
         
     except Exception as e:
         st.error(f"⚠️ Error loading model: {str(e)}")
