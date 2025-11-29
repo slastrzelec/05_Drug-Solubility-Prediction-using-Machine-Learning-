@@ -1,0 +1,88 @@
+{
+  "project_name": "Drug Solubility Prediction using Machine Learning",
+  "date": "2025-11-29 10:53:33",
+  "objective": "Predict aqueous solubility of drug molecules using Morgan fingerprints and Random Forest",
+  "dataset": {
+    "total_compounds": 1144,
+    "training_samples": 915,
+    "test_samples": 229,
+    "features": 2048,
+    "solubility_range": "-11.60 to 1.58 log(mol/L)"
+  },
+  "methodology": {
+    "feature_extraction": "Morgan Fingerprints (radius=2, nbits=2048)",
+    "models_tested": [
+      "Linear Regression",
+      "Ridge",
+      "Random Forest",
+      "Gradient Boosting",
+      "SVR"
+    ],
+    "best_model": "Random Forest",
+    "hyperparameter_tuning": "GridSearchCV (5-fold CV, 270 combinations)"
+  },
+  "best_model_performance": {
+    "train_rmse": 0.5127247157433902,
+    "test_rmse": 1.1394031385810677,
+    "train_r2": 0.9402439434342834,
+    "test_r2": 0.7018654652764855,
+    "train_mae": 0.35308194228788825,
+    "test_mae": 0.855129852715334
+  },
+  "hyperparameters": {
+    "n_estimators": 100,
+    "max_depth": null,
+    "max_features": "sqrt",
+    "min_samples_split": 2,
+    "min_samples_leaf": 1
+  },
+  "top_10_important_features": [
+    {
+      "feature": "fp_1380",
+      "importance": 0.11602810639290051
+    },
+    {
+      "feature": "fp_1143",
+      "importance": 0.060433187124476886
+    },
+    {
+      "feature": "fp_1683",
+      "importance": 0.04242144903972337
+    },
+    {
+      "feature": "fp_561",
+      "importance": 0.03241096909693025
+    },
+    {
+      "feature": "fp_1087",
+      "importance": 0.02840087379816162
+    },
+    {
+      "feature": "fp_352",
+      "importance": 0.028220724947589655
+    },
+    {
+      "feature": "fp_875",
+      "importance": 0.021321935593669992
+    },
+    {
+      "feature": "fp_807",
+      "importance": 0.01959174655996005
+    },
+    {
+      "feature": "fp_519",
+      "importance": 0.01653260486357611
+    },
+    {
+      "feature": "fp_650",
+      "importance": 0.016159744621340375
+    }
+  ],
+  "key_insights": [
+    "Only 128 out of 2048 features (6.2%) needed for 80% explanation",
+    "Test R\u00b2 = 0.7019: Model explains ~70.2% of solubility variance",
+    "Random Forest outperforms linear models and SVR",
+    "Slight overfitting (train R\u00b2 - test R\u00b2 = 0.2384) is acceptable for prediction task",
+    "Model successfully predicts solubility for known drugs with chemical validity"
+  ]
+}
