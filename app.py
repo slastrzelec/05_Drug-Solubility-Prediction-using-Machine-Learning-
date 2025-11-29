@@ -1,5 +1,6 @@
 import streamlit as st
 import pickle
+import joblib
 import numpy as np
 import pandas as pd
 from rdkit import Chem
@@ -39,14 +40,49 @@ st.markdown("""
 # Load model and scaler
 @st.cache_resource
 def load_model():
+    import os
+    
+    st.write("🔍 Searching for model files...")
+    st.write(f"Current directory: {os.getcwd()}")
+    st.write(f"Files in directory: {os.listdir('.')}")
+    
     try:
+        st.write("Loading model...")
         with open('drug_solubility_model.pkl', 'rb') as f:
             model = pickle.load(f)
+        
+        st.write("Loading scaler...")
         with open('scaler.pkl', 'rb') as f:
             scaler = pickle.load(f)
+        
+        st.success("✅ Model and scaler loaded successfully!")
         return model, scaler
-    except FileNotFoundError:
-        st.error("⚠️ Model files not found! Please ensure 'drug_solubility_model.pkl' and 'scaler.pkl' are in the directory.")
+        
+    except FileNotFoundError as e:
+        st.error(f"""
+        ⚠️ Model files not found: {str(e)}
+        
+        **Fix:**
+        1. Make sure these files are in your GitHub repo:
+           - `drug_solubility_model.pkl`
+           - `scaler.pkl`
+        
+        2. If they're too large (>100MB), use Git LFS:
+           ```bash
+           git lfs install
+           git lfs track "*.pkl"
+           git add .gitattributes
+           git add drug_solubility_model.pkl scaler.pkl
+           git commit -m "Add model files with Git LFS"
+           git push origin main
+           ```
+        
+        3. Restart the app after pushing
+        """)
+        return None, None
+        
+    except Exception as e:
+        st.error(f"⚠️ Error loading model: {str(e)}")
         return None, None
 
 # Prediction function
