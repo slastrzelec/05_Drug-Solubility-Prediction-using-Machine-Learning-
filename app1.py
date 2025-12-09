@@ -3,7 +3,15 @@ import joblib
 import numpy as np
 import pandas as pd
 from rdkit import Chem
-from rdkit.Chem import AllChem, Draw, Descriptors, Crippen, Lipinski
+from rdkit.Chem import AllChem, Descriptors, Crippen, Lipinski
+
+# Try to import Draw, fallback if it fails
+try:
+    from rdkit.Chem import Draw
+    HAS_DRAW = True
+except ImportError:
+    HAS_DRAW = False
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 
