@@ -1,11 +1,12 @@
 import streamlit as st
 import joblib
-import numpy as np
 import pandas as pd
 from rdkit import Chem
-from rdkit.Chem import AllChem, Draw, Descriptors, Crippen, Lipinski
+from rdkit.Chem import Draw, Descriptors, Crippen, Lipinski
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+from solubility import predict_solubility, categorize_solubility
 
 # Page configuration
 st.set_page_config(
@@ -30,38 +31,6 @@ def load_model():
     except Exception as e:
         st.error(f"⚠️ Error loading model: {str(e)}")
         return None, None
-
-# Prediction function
-def predict_solubility(smiles, model, scaler):
-    """Predict solubility for a given SMILES string"""
-    try:
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            return None, "Invalid SMILES notation"
-        
-        fp = AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=2048)
-        fp_array = np.array(fp).reshape(1, -1)
-        
-        fp_scaled = scaler.transform(fp_array)
-        log_solubility = model.predict(fp_scaled)[0]
-        actual_solubility = 10 ** log_solubility
-        
-        return {
-            'log_solubility': log_solubility,
-            'actual_solubility': actual_solubility,
-            'mol': mol
-        }, None
-    except Exception as e:
-        return None, str(e)
-
-# Categorize solubility
-def categorize_solubility(log_sol):
-    if log_sol > -1:
-        return "🟢 High", "High solubility", "#00ff41"
-    elif log_sol > -3:
-        return "🟡 Medium", "Moderate solubility", "#ffaa00"
-    else:
-        return "🔴 Low", "Low solubility", "#ff0000"
 
 # Wizualizacja struktury molekularnej
 def display_molecule_structure(smiles):
