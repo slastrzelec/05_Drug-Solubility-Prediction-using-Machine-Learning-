@@ -85,6 +85,9 @@ The gap between the in-distribution test score (0.91) and the external score (0.
 
 ## 🧪 Example predictions
 
+![Prediction example: aspirin in the Streamlit app](screenshot_prediction.png)
+
+
 | Drug | SMILES | Predicted log(sol) | Category |
 |---|---|---|---|
 | Aspirin | `CC(=O)Oc1ccccc1C(=O)O` | -2.55 | 🟡 Medium |
@@ -104,6 +107,9 @@ Every prediction also gets:
 See `uncertainty.py` for the implementation and `uncertainty_calibration.json` for the calibration numbers.
 
 ## 🚀 Streamlit app
+
+![Database examples tab: precomputed predictions for common drugs](screenshot_examples.png)
+
 
 An interactive app (`app.py`) built on top of the trained pipeline:
 
