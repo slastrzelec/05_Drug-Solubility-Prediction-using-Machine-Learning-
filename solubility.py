@@ -3,15 +3,21 @@
 Kept separate from app.py so it can be unit tested without importing
 Streamlit (app.py runs its UI code at import time, which makes testing
 functions defined inline in it impractical).
+
+v2: uses a single sklearn Pipeline (scaling + feature selection + model,
+see SPEC.md and train_v2.py) fit on a combined fingerprint + RDKit
+descriptor feature vector (features.py), replacing the earlier separate
+model.joblib + scaler.joblib on fingerprint-only features.
 """
 
-import numpy as np
 from rdkit import Chem
-from rdkit.Chem import AllChem
+
+from features import featurize_mol
 
 
-def predict_solubility(smiles, model, scaler):
-    """Predict aqueous solubility for a given SMILES string.
+def predict_solubility(smiles, pipeline):
+    """Predict aqueous solubility for a given SMILES string using a fitted
+    pipeline (see train_v2.py).
 
     Returns a (result, error) tuple: on success, result is a dict with
     'log_solubility', 'actual_solubility' and 'mol' and error is None;
@@ -22,11 +28,8 @@ def predict_solubility(smiles, model, scaler):
         if mol is None:
             return None, "Invalid SMILES notation"
 
-        fp = AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=2048)
-        fp_array = np.array(fp).reshape(1, -1)
-
-        fp_scaled = scaler.transform(fp_array)
-        log_solubility = model.predict(fp_scaled)[0]
+        features = featurize_mol(mol).reshape(1, -1)
+        log_solubility = pipeline.predict(features)[0]
         actual_solubility = 10 ** log_solubility
 
         return {

@@ -1,7 +1,7 @@
 """Unit tests for the core prediction logic in solubility.py.
 
 These test the pure functions used by the Streamlit app (app.py imports
-them) without needing Streamlit itself or the trained model files.
+them) without needing Streamlit itself or the trained pipeline file.
 """
 
 import numpy as np
@@ -12,18 +12,11 @@ from solubility import categorize_solubility, predict_solubility
 ASPIRIN_SMILES = "CC(=O)Oc1ccccc1C(=O)O"
 
 
-class FakeScaler:
-    """Stand-in for the fitted StandardScaler: passes features through
-    unscaled so tests don't depend on the trained scaler.joblib."""
-
-    def transform(self, X):
-        return X
-
-
-class FakeModel:
-    """Stand-in for the trained RandomForestRegressor: returns a fixed
-    prediction so tests are deterministic and don't need the ~2MB
-    trained model file."""
+class FakePipeline:
+    """Stand-in for the fitted sklearn Pipeline (scaler + selector + model,
+    see train_v2.py): returns a fixed prediction so tests are
+    deterministic and don't need the trained
+    drug_solubility_pipeline.joblib file."""
 
     def __init__(self, prediction):
         self.prediction = prediction
@@ -35,7 +28,7 @@ class FakeModel:
 # --- predict_solubility ---------------------------------------------------
 
 def test_predict_solubility_valid_smiles_returns_result():
-    result, error = predict_solubility(ASPIRIN_SMILES, FakeModel(-2.55), FakeScaler())
+    result, error = predict_solubility(ASPIRIN_SMILES, FakePipeline(-2.55))
 
     assert error is None
     assert result["log_solubility"] == pytest.approx(-2.55)
@@ -44,7 +37,7 @@ def test_predict_solubility_valid_smiles_returns_result():
 
 
 def test_predict_solubility_invalid_smiles_returns_error():
-    result, error = predict_solubility("not a smiles!!", FakeModel(0.0), FakeScaler())
+    result, error = predict_solubility("not a smiles!!", FakePipeline(0.0))
 
     assert result is None
     assert error == "Invalid SMILES notation"
@@ -54,7 +47,7 @@ def test_predict_solubility_empty_string_parses_as_empty_molecule():
     # RDKit treats "" as a valid (empty) molecule rather than raising, so
     # this does NOT hit the "Invalid SMILES notation" branch - unlike a
     # genuinely malformed string such as "not a smiles!!".
-    result, error = predict_solubility("", FakeModel(0.0), FakeScaler())
+    result, error = predict_solubility("", FakePipeline(0.0))
 
     assert error is None
     assert result["mol"] is not None
@@ -62,10 +55,26 @@ def test_predict_solubility_empty_string_parses_as_empty_molecule():
 
 
 def test_predict_solubility_actual_solubility_is_power_of_ten_of_log():
-    result, error = predict_solubility(ASPIRIN_SMILES, FakeModel(-3.0), FakeScaler())
+    result, error = predict_solubility(ASPIRIN_SMILES, FakePipeline(-3.0))
 
     assert error is None
     assert result["actual_solubility"] == pytest.approx(1e-3)
+
+
+def test_predict_solubility_passes_a_single_row_feature_vector():
+    # Guards against passing an unbatched 1D vector to pipeline.predict,
+    # which scikit-learn rejects - the whole point of Pipeline.predict is
+    # that scaling/selection/model all run through the same fitted state
+    # from training, so the call shape must match what training used.
+    captured = {}
+
+    class RecordingPipeline:
+        def predict(self, X):
+            captured["shape"] = X.shape
+            return np.array([-1.0])
+
+    predict_solubility(ASPIRIN_SMILES, RecordingPipeline())
+    assert captured["shape"][0] == 1
 
 
 # --- categorize_solubility -------------------------------------------------

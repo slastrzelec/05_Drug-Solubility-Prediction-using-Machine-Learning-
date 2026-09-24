@@ -16,21 +16,20 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Load model and scaler
+# Load the trained pipeline (scaling + feature selection + model, see SPEC.md)
 @st.cache_resource
 def load_model():
     import os
     try:
-        if os.path.exists('drug_solubility_model.joblib'):
-            model = joblib.load('drug_solubility_model.joblib')
-            scaler = joblib.load('scaler.joblib')
-            return model, scaler
+        if os.path.exists('drug_solubility_pipeline.joblib'):
+            pipeline = joblib.load('drug_solubility_pipeline.joblib')
+            return pipeline
         else:
-            st.error("⚠️ Model files not found!")
-            return None, None
+            st.error("⚠️ Model file not found!")
+            return None
     except Exception as e:
         st.error(f"⚠️ Error loading model: {str(e)}")
-        return None, None
+        return None
 
 # Wizualizacja struktury molekularnej
 def display_molecule_structure(smiles):
@@ -64,9 +63,9 @@ st.markdown("Predict aqueous solubility of drug molecules using Machine Learning
 st.markdown("---")
 
 # Load model
-model, scaler = load_model()
+pipeline = load_model()
 
-if model is None or scaler is None:
+if pipeline is None:
     st.stop()
 
 # Create tabs
@@ -89,7 +88,7 @@ with tab1:
         predict_button = st.button("🔍 Predict Solubility", use_container_width=True)
     
     if predict_button and smiles_input:
-        result, error = predict_solubility(smiles_input, model, scaler)
+        result, error = predict_solubility(smiles_input, pipeline)
         
         if error:
             st.error(f"❌ Error: {error}")
@@ -150,7 +149,7 @@ with tab2:
     
     predictions_data = []
     for drug_name, smiles in examples.items():
-        result, _ = predict_solubility(smiles, model, scaler)
+        result, _ = predict_solubility(smiles, pipeline)
         if result:
             category, _, _ = categorize_solubility(result['log_solubility'])
             predictions_data.append({
@@ -181,12 +180,12 @@ with tab3:
     with col1:
         st.subheader("📊 Model Performance")
         metrics = {
-            "Test R² Score": "0.6985",
-            "Test RMSE": "1.1459",
-            "Test MAE": "0.8599",
+            "Test R² Score": "0.9116",
+            "Test RMSE": "0.6203",
+            "Test MAE": "0.4824",
+            "AqSolDB external R²": "0.6381",
             "Training Samples": "915",
             "Test Samples": "229",
-            "Total Compounds": "1,144"
         }
         for metric, value in metrics.items():
             st.metric(metric, value)
@@ -195,13 +194,12 @@ with tab3:
         st.subheader("🔬 Technical Details")
         st.markdown("""
         **Model Architecture:**
-        - Algorithm: Random Forest Regressor
-        - n_estimators: 100
-        - max_depth: None
+        - Algorithm: XGBoost Regressor
+        - Selected via GridSearchCV over Random Forest / Gradient Boosting / SVR / XGBoost
         
         **Feature Engineering:**
-        - Morgan Fingerprints (radius=2)
-        - 2048 binary features
+        - Morgan Fingerprints (radius=2, 2048 bits) + 7 RDKit physicochemical descriptors
+        - Feature selection (SelectFromModel) inside the training pipeline
         """)
 
 # TAB 4: How to Use

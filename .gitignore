@@ -3,3 +3,9 @@ __pycache__/
 *.pyc
 .DS_Store
 _to_delete/
+
+# Large intermediate artifacts from train_v2.py, reproducible by re-running it
+esol_features.npz
+aqsoldb_external_features.npz
+aqsoldb_curated_raw.csv
+train_v2_results.json

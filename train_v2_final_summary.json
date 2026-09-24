@@ -1,0 +1,63 @@
+{
+  "candidates": {
+    "RandomForest": {
+      "cv_r2": 0.8517322425126211,
+      "best_params": {
+        "model__max_depth": null,
+        "model__max_features": "sqrt",
+        "model__n_estimators": 200
+      },
+      "seconds": 102.3
+    },
+    "GradientBoosting": {
+      "cv_r2": 0.8867700420426992,
+      "best_params": {
+        "model__learning_rate": 0.1,
+        "model__max_depth": 3,
+        "model__n_estimators": 200
+      },
+      "seconds": 119.66366314888
+    },
+    "SVR": {
+      "cv_r2": 0.7324397000108925,
+      "best_params": {
+        "model__C": 10,
+        "model__epsilon": 0.1,
+        "model__kernel": "rbf"
+      },
+      "seconds": 147.2455608844757
+    },
+    "XGBoost": {
+      "cv_r2": 0.8934026541882869,
+      "best_params": {
+        "model__learning_rate": 0.05,
+        "model__max_depth": 4,
+        "model__n_estimators": 400
+      },
+      "seconds": 170.28009724617004
+    }
+  },
+  "best_model": "XGBoost",
+  "best_params": {
+    "model__learning_rate": 0.05,
+    "model__max_depth": 4,
+    "model__n_estimators": 400
+  },
+  "test_r2": 0.9116364307397116,
+  "test_rmse": 0.6203087302065827,
+  "test_mae": 0.4824039800519766,
+  "n_features_selected": 1028,
+  "n_features_total": 2055,
+  "baseline_test_r2": 0.6985,
+  "beats_baseline": true,
+  "train_size": 915,
+  "test_size": 229,
+  "external_validation": {
+    "dataset": "AqSolDB (Sorkun et al. 2019), deduplicated against ESOL by canonical SMILES",
+    "n_compounds": 8881,
+    "n_esol_overlap_removed": 1099,
+    "r2": 0.638140758057343,
+    "rmse": 1.4431622003712494,
+    "mae": 0.988451678472493
+  }
+}

@@ -1,96 +1,87 @@
 # Drug Solubility Prediction using Machine Learning
 
-A machine learning project that predicts the aqueous solubility of drug molecules from their chemical structure, using Morgan fingerprints and a Random Forest regressor, wrapped in an interactive Streamlit app.
+A machine learning project that predicts the aqueous solubility of drug molecules from their chemical structure, using Morgan fingerprints, RDKit physicochemical descriptors, and an XGBoost regressor, wrapped in an interactive Streamlit app.
+
+See [SPEC.md](SPEC.md) for the spec this model-improvement pass was built against (feature engineering, feature selection, and the data-leakage guardrails it follows), and [train_v2.py](train_v2.py) for the actual training script.
 
 ## 🎯 Project Overview
 
 **Problem:** given a drug's chemical structure (SMILES notation), predict its solubility in water — log(mol/L).
 
 **Approach:**
-1. Convert chemical structures to numerical features (Morgan fingerprints)
-2. Train and compare multiple ML models
-3. Optimize hyperparameters with `GridSearchCV`
-4. Ship the best model (Random Forest, test R² ≈ 0.70) behind a Streamlit UI
+1. Convert chemical structures to numerical features (Morgan fingerprints + physicochemical descriptors)
+2. Select the most informative features, fit only on the training fold
+3. Train and compare multiple ML models with `GridSearchCV`
+4. Validate on a second, independent dataset (AqSolDB) before trusting the result
+5. Ship the best model (XGBoost, test R² ≈ 0.91) behind a Streamlit UI
 
 This property matters in pharmaceutical development because it directly affects a drug's bioavailability and dosing.
 
 ## 📊 Dataset
 
 - **Source:** ESOL dataset (Delaney, 2004) — 1,144 drug compounds
-- **Features:** 2,048 Morgan fingerprint bits per molecule
 - **Target:** log(solubility : mol/L), range -11.60 to 1.58
 - **Split:** 80/20 (915 training / 229 test samples), `random_state=42`
+- **External validation:** [AqSolDB](https://doi.org/10.1038/s41597-019-0151-1) (Sorkun et al., 2019), 8,881 compounds after removing the 1,099 that overlap with ESOL (ESOL is one of AqSolDB's nine source datasets)
 
 ## 🔬 Methodology
 
 ### Feature engineering
 
-Morgan fingerprints (radius=2, 2048 bits) encode each molecule's connectivity and local atomic environment as a binary vector — the standard cheminformatics descriptor for this kind of task.
+Each molecule is represented by a 2,048-bit Morgan fingerprint (radius=2) plus 7 RDKit physicochemical descriptors — molecular weight, LogP (Crippen), TPSA, H-bond donor/acceptor counts, rotatable bond count, and aromatic ring count (`features.py`).
 
 ```python
-from rdkit.Chem import AllChem
-fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)
+from features import featurize_mol
+from rdkit import Chem
+
+vector = featurize_mol(Chem.MolFromSmiles("CC(=O)Oc1ccccc1C(=O)O"))  # 2055-d vector
 ```
 
-Features were standardized with `StandardScaler` before training.
+Features are standardized and reduced with `SelectFromModel` (median importance threshold on a Random Forest) — both fit **inside the training fold only**, as part of a single `sklearn.Pipeline`, so no information from the test set or from AqSolDB reaches the fitted scaler or selector. See [SPEC.md](SPEC.md) for why this matters.
 
 ### Model comparison
 
-| Model | Test R² | Test RMSE | Test MAE |
-|---|---|---|---|
-| Linear Regression | -0.14 | 2.23 | 1.12 |
-| Ridge Regression | 0.34 | 1.70 | 1.25 |
-| **Random Forest** | **0.70** | **1.14** | **0.86** |
-| Gradient Boosting | 0.62 | 1.28 | 0.98 |
-| SVR | 0.63 | 1.27 | 0.96 |
+5-fold `GridSearchCV`, scored on the training set only:
 
-Linear models underfit — solubility doesn't depend linearly on individual fingerprint bits — so the non-linear ensemble methods (Random Forest, Gradient Boosting, SVR) clearly outperform them. Random Forest was selected as the best trade-off of accuracy, training speed, and interpretability (feature importances).
+| Model | CV R² |
+|---|---|
+| SVR | 0.732 |
+| Random Forest | 0.852 |
+| Gradient Boosting | 0.887 |
+| **XGBoost** | **0.893** |
 
-### Hyperparameter tuning
-
-`GridSearchCV`, 5-fold CV, 270 parameter combinations (1,350 fits total). Best parameters:
-
-```
-n_estimators: 100
-max_depth: None
-max_features: sqrt
-min_samples_split: 2
-min_samples_leaf: 1
-```
-
-Best CV R²: 0.657 — close to the tuned model's test performance, and identical to the untuned defaults, meaning the original configuration was already close to optimal.
+XGBoost was selected and refit on the full training set; the 229-row test set was then evaluated exactly once.
 
 ## 📈 Results
 
-**Final model (Random Forest), test set:**
+**Final model (XGBoost pipeline), test set (touched once):**
 
-- R² = 0.70 (explains ~70% of solubility variance)
-- RMSE = 1.14 log(mol/L), MAE = 0.86 log(mol/L)
-- Train R² = 0.94 → train/test gap of ~0.24, i.e. mild but controlled overfitting
+- **R² = 0.9116**, RMSE = 0.6203, MAE = 0.4824 log(mol/L)
+- Train R² = 0.976 → train/test gap of 0.064, notably smaller than the previous fingerprint-only baseline's 0.24 — better generalization, not just a better fit
 
-**5-fold cross-validation:** mean R² = 0.658 ± 0.017 — stable across folds, no single fold underperforms.
+**External validation on AqSolDB** (8,881 compounds never seen during training or tuning):
 
-**Performance by solubility range** (test set):
+- **R² = 0.638**, RMSE = 1.443, MAE = 0.988
 
-| Range | log(sol) | R² | MAE |
-|---|---|---|---|
-| High solubility | > -1 | 0.78 | 0.52 |
-| Medium solubility | -1 to -3 | 0.72 | 0.89 |
-| Low solubility | < -3 | 0.61 | 1.24 |
+The gap between the in-distribution test score (0.91) and the external score (0.64) is expected and is reported deliberately rather than blended into one number — it shows how much the model's accuracy depends on being close to the ESOL training distribution, which is the honest way to read any single-dataset R².
 
-The model is most accurate for well-dissolved compounds and least accurate for poorly soluble ones — the harder, more sparsely represented range in the dataset.
+**What changed vs. the previous fingerprint-only Random Forest baseline:**
 
-**Feature importance:** only 128 of the 2,048 fingerprint bits (6.2%) account for 80% of the model's predictive power. The single most important feature, `fp_1380`, accounts for 11.6% of total importance on its own and appears in 234 molecules — likely encoding a polar substructure associated with hydrogen bonding.
+| | Baseline (fingerprint only) | v2 (fingerprint + descriptors) |
+|---|---|---|
+| Test R² | 0.6985 | **0.9116** |
+| Test RMSE | 1.1459 | **0.6203** |
+| Train/test gap | 0.24 | **0.06** |
+
+**Feature importance:** `MolLogP` is the single most important feature (17.5% — more than the next 5 fingerprint bits combined), consistent with LogP's well-established role in aqueous solubility (Yalkowsky's General Solubility Equation). Feature selection kept 1,028 of 2,055 features.
 
 | Rank | Feature | Importance |
 |---|---|---|
-| 1 | fp_1380 | 11.6% |
-| 2 | fp_1143 | 6.0% |
-| 3 | fp_1683 | 4.2% |
-| 4 | fp_561 | 3.2% |
-| 5 | fp_1087 | 2.8% |
-
-**Known weak spots:** the worst individual errors (|residual| > 2.5) are organosilanes and heavily halogenated compounds — categories that are rare in the training data (~3% of the test set).
+| 1 | MolLogP | 17.5% |
+| 2 | fp_1977 | 2.5% |
+| 3 | fp_1380 | 2.0% |
+| 4 | MolWt | 1.9% |
+| 5 | fp_26 | 1.9% |
 
 ## 🧪 Example predictions
 
@@ -105,11 +96,11 @@ Categories: 🟢 High (log(sol) > -1), 🟡 Medium (-1 to -3), 🔴 Low (< -3).
 
 ## 🚀 Streamlit app
 
-An interactive app (`app.py`) built on top of the trained model:
+An interactive app (`app.py`) built on top of the trained pipeline:
 
 - **Predict tab** — paste a SMILES string, get an instant prediction, molecule drawing, and solubility category with interpretation
 - **Database examples** — precomputed predictions for common drugs (aspirin, ibuprofen, paracetamol, caffeine, naproxen, diclofenac) as a quick reference
-- **About the model** — performance metrics, model comparison chart, technical details
+- **About the model** — performance metrics, model comparison, technical details
 - **How to use** — SMILES notation primer and where to find SMILES for a given drug (PubChem, DrugBank, ChemSpider)
 
 Deployed on Streamlit Community Cloud; `packages.txt` installs the system libraries (`libxrender1`, `libxext6`, `libsm6`, ...) that RDKit's `Chem.Draw` module needs on that platform.
@@ -125,21 +116,24 @@ Batch / scripted predictions:
 
 ```python
 import joblib
-import numpy as np
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from features import featurize_mol
 
-model = joblib.load('drug_solubility_model.joblib')
-scaler = joblib.load('scaler.joblib')
+pipeline = joblib.load('drug_solubility_pipeline.joblib')
 
 smiles = "CC(=O)Oc1ccccc1C(=O)O"  # Aspirin
 mol = Chem.MolFromSmiles(smiles)
-fp = AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=2048)
-fp_scaled = scaler.transform(np.array(fp).reshape(1, -1))
-prediction = model.predict(fp_scaled)[0]
+features = featurize_mol(mol).reshape(1, -1)
+prediction = pipeline.predict(features)[0]
 
 print(f"Predicted log(solubility): {prediction:.2f}")
 print(f"Actual solubility: {10 ** prediction:.2e} mol/L")
+```
+
+Retraining from scratch (several minutes — downloads AqSolDB and reruns the full model comparison):
+
+```bash
+python train_v2.py
 ```
 
 **SMILES troubleshooting:** the notation must be a single line with no spaces and valid atom/bond syntax (e.g. `CC(=O)Oc1ccccc1C(=O)O`, not `CC(=O) O c1ccccc1 C(=O)O`). Verify against [PubChem](https://pubchem.ncbi.nlm.nih.gov/) if a prediction fails.
@@ -148,32 +142,35 @@ print(f"Actual solubility: {10 ** prediction:.2e} mol/L")
 
 ```
 05_drug_solub/
-├── app.py                       # Streamlit application
-├── drug_solubility.ipynb        # Full analysis notebook (EDA, training, evaluation)
-├── drug_solubility_model.joblib # Trained Random Forest model
-├── scaler.joblib                # Fitted StandardScaler
-├── project_summary.json         # Machine-readable results summary
-├── data.txt                     # ESOL dataset
+├── app.py                          # Streamlit application
+├── features.py                     # Shared feature construction (fingerprint + descriptors)
+├── solubility.py                   # Core prediction/classification logic, unit tested
+├── train_v2.py                     # Training script: model comparison, selection, AqSolDB validation
+├── SPEC.md                         # Spec for the model-improvement pass (leakage guardrails, plan)
+├── drug_solubility_pipeline.joblib # Trained pipeline (scaler + feature selector + XGBoost)
+├── drug_solubility.ipynb           # Original analysis notebook (EDA, v1 baseline training)
+├── project_summary.json            # Machine-readable results summary
+├── data.txt                        # ESOL dataset
 ├── requirements.txt
-├── packages.txt                 # System deps for RDKit on Streamlit Cloud
+├── packages.txt                    # System deps for RDKit on Streamlit Cloud
+├── tests/                          # pytest suite (features, prediction logic, leakage guardrail)
 └── README.md
 ```
 
 ## 🎓 Skills demonstrated
 
-Cheminformatics (SMILES, Morgan fingerprints, molecular descriptors) · machine learning (model selection, hyperparameter tuning, cross-validation, feature importance) · Python (pandas, numpy, scikit-learn, RDKit, Streamlit) · deployment (Streamlit Community Cloud).
+Cheminformatics (SMILES, Morgan fingerprints, molecular descriptors) · machine learning (model selection, hyperparameter tuning, cross-validation, feature selection, external validation, feature importance) · Python (pandas, numpy, scikit-learn, XGBoost, RDKit, Streamlit) · engineering practice (spec-driven development, leakage-safe pipelines, automated tests + CI) · deployment (Streamlit Community Cloud).
 
 ## 📊 Possible next steps
 
-- Additional descriptors (MACCS keys, RDKit physicochemical descriptors) alongside the fingerprint
-- Gradient-boosted alternatives (XGBoost/LightGBM) and feature selection on the 2,048-bit fingerprint
-- External validation on a second dataset (e.g. AqSolDB)
-- Prediction uncertainty intervals and an applicability-domain check
-- Automated tests + CI
+- Prediction uncertainty intervals (free from XGBoost/RF tree variance) and an applicability-domain check (Tanimoto similarity to the training set) before trusting a prediction
+- FastAPI `/predict` endpoint + Dockerfile, with Streamlit as the UI on top
+- Investigate the external-validation gap further (which AqSolDB compound classes drive the R² drop from 0.91 to 0.64)
 
 ## 📝 References
 
 - Delaney, J. S. (2004). ESOL: Estimating aqueous solubility directly from molecular structure. *Journal of Chemical Information and Computer Sciences*, 44(3), 1000–1005.
+- Sorkun, M. C., Khetan, A. & Er, S. (2019). AqSolDB: A curated reference set of aqueous solubility and 2D descriptors for a diverse set of compounds. *Scientific Data*, 6, 143.
 - Morgan, H. L. (1965). The generation of a unique machine description for chemical structures.
 - [RDKit documentation](https://www.rdkit.org/)
 
