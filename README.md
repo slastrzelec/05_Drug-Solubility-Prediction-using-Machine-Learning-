@@ -1,4 +1,5 @@
 # Drug Solubility Prediction using Machine Learning
+[![Tests](https://github.com/slastrzelec/drug-solubility-prediction/actions/workflows/tests.yml/badge.svg)](https://github.com/slastrzelec/drug-solubility-prediction/actions/workflows/tests.yml)
 
 A machine learning project that predicts the aqueous solubility of drug molecules from their chemical structure, using Morgan fingerprints, RDKit physicochemical descriptors, and an XGBoost regressor, wrapped in an interactive Streamlit app.
 
