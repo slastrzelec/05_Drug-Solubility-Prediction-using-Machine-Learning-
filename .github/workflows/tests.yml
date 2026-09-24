@@ -25,3 +25,11 @@ jobs:
 
       - name: Run tests
         run: pytest -v
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the API image (smoke test - not pushed anywhere)
+        run: docker build -t drug-solubility-api .

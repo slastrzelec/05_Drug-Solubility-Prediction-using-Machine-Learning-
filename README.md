@@ -114,6 +114,28 @@ An interactive app (`app.py`) built on top of the trained pipeline:
 
 Deployed on Streamlit Community Cloud; `packages.txt` installs the system libraries (`libxrender1`, `libxext6`, `libsm6`, ...) that RDKit's `Chem.Draw` module needs on that platform.
 
+## ⚙️ FastAPI service
+
+A `POST /predict` / `GET /health` API (`api.py`), independent of the Streamlit app — both load the same trained pipeline directly rather than one calling the other, so there's no extra hosting dependency between them. Pydantic validates the request; the response includes the point prediction, category, 90% interval, and applicability-domain flag, reusing the exact same `solubility.predict_with_uncertainty` code path the Streamlit app uses (one prediction implementation, two front ends).
+
+```bash
+uvicorn api:app --reload
+# interactive docs: http://localhost:8000/docs
+```
+
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"smiles": "CC(=O)Oc1ccccc1C(=O)O"}'
+```
+
+Containerized with `Dockerfile` (`python:3.11-slim` + the same `packages.txt` system libraries + `uvicorn`):
+
+```bash
+docker build -t drug-solubility-api .
+docker run -p 8000:8000 drug-solubility-api
+```
+
 ## 🛠️ Installation & usage
 
 ```bash
@@ -152,11 +174,13 @@ python train_v2.py
 ```
 05_drug_solub/
 ├── app.py                          # Streamlit application
+├── api.py                          # FastAPI service (POST /predict, GET /health)
+├── Dockerfile                      # Container for the FastAPI service
 ├── features.py                     # Shared feature construction (fingerprint + descriptors)
 ├── solubility.py                   # Core prediction/classification logic, unit tested
 ├── uncertainty.py                  # Prediction interval + applicability-domain check
 ├── train_v2.py                     # Training script: model comparison, selection, AqSolDB validation, calibration
-├── SPEC.md                         # Spec for the model-improvement pass (leakage guardrails, plan)
+├── SPEC.md                         # Spec for the model-improvement + productionization passes
 ├── drug_solubility_pipeline.joblib # Trained pipeline (scaler + feature selector + XGBoost)
 ├── train_fingerprints.pkl          # Training-set fingerprints for the applicability-domain check
 ├── uncertainty_calibration.json    # Calibrated prediction-interval half-width
@@ -164,20 +188,20 @@ python train_v2.py
 ├── project_summary.json            # Machine-readable results summary
 ├── data.txt                        # ESOL dataset
 ├── requirements.txt
-├── packages.txt                    # System deps for RDKit on Streamlit Cloud
-├── tests/                          # pytest suite (features, prediction logic, leakage guardrail, uncertainty)
+├── packages.txt                    # System deps for RDKit (Streamlit Cloud + Docker)
+├── tests/                          # pytest suite (features, prediction logic, leakage guardrail, uncertainty, API)
 └── README.md
 ```
 
 ## 🎓 Skills demonstrated
 
-Cheminformatics (SMILES, Morgan fingerprints, molecular descriptors) · machine learning (model selection, hyperparameter tuning, cross-validation, feature selection, external validation, feature importance, conformal prediction intervals, applicability-domain analysis) · Python (pandas, numpy, scikit-learn, XGBoost, RDKit, Streamlit) · engineering practice (spec-driven development, leakage-safe pipelines, automated tests + CI) · deployment (Streamlit Community Cloud).
+Cheminformatics (SMILES, Morgan fingerprints, molecular descriptors) · machine learning (model selection, hyperparameter tuning, cross-validation, feature selection, external validation, feature importance, conformal prediction intervals, applicability-domain analysis) · Python (pandas, numpy, scikit-learn, XGBoost, RDKit, Streamlit, FastAPI, Pydantic) · engineering practice (spec-driven development, leakage-safe pipelines, automated tests + CI, containerization) · deployment (Streamlit Community Cloud, Docker).
 
 ## 📊 Possible next steps
 
-- FastAPI `/predict` endpoint + Dockerfile, with Streamlit as the UI on top
 - Investigate the external-validation gap further (which AqSolDB compound classes drive the R² drop from 0.91 to 0.64)
 - A proper 3-way split (train / calibration / test) if the dataset grows, so the prediction interval is calibrated independently of the reported test R²
+- Deploy the API somewhere reachable (Render/Fly.io/a small VPS) rather than only documenting `docker run` locally
 
 ## 📝 References
 

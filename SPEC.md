@@ -112,3 +112,33 @@ retraining, no change to the fitted scaler/selector/model):
 No new data enters training; only `data.txt`'s existing train split is
 reused to build a fingerprint lookup table. No leakage risk beyond what
 step 3 already accepted.
+
+---
+
+## Addendum: Step 5 - FastAPI + Docker
+
+Productionizes the existing pipeline behind a small API, independent of
+the Streamlit app (both load `drug_solubility_pipeline.joblib` and the
+step-4 artifacts directly - no HTTP coupling between them, no extra
+hosting to keep the Streamlit deployment working).
+
+- `api.py`: `POST /predict` (Pydantic request model validates the SMILES
+  field is a non-empty string; response includes the point prediction,
+  category, 90% interval, and applicability-domain flag, reusing
+  `solubility.predict_with_uncertainty` - the same code path the
+  Streamlit app uses, so there is exactly one prediction implementation)
+  and `GET /health`.
+- `Dockerfile`: `python:3.11-slim`, installs the `packages.txt` system
+  libraries RDKit needs (same list already used for Streamlit Cloud),
+  installs `requirements.txt`, runs `uvicorn api:app`.
+- Tests via FastAPI's `TestClient` (in-process, no server/Docker needed
+  to run them - covers valid SMILES, invalid SMILES -> 400, missing
+  field -> 422).
+- No retraining, no new data - purely an inference-layer addition, so
+  the leakage guardrails from steps 3-4 are unaffected.
+
+Note: this environment has no Docker available to actually build/run the
+image, so the Dockerfile is written to the standard pattern and verified
+by the API's own test suite (which runs the same code the container
+would run) rather than by an actual `docker build`. Sławek should build
+and run it once locally to confirm.
