@@ -8,11 +8,16 @@ v2: uses a single sklearn Pipeline (scaling + feature selection + model,
 see SPEC.md and train_v2.py) fit on a combined fingerprint + RDKit
 descriptor feature vector (features.py), replacing the earlier separate
 model.joblib + scaler.joblib on fingerprint-only features.
+
+Step 4 adds predict_with_uncertainty(), which wraps predict_solubility()
+with a calibrated prediction interval and an applicability-domain check
+(see uncertainty.py and SPEC.md's step-4 addendum).
 """
 
 from rdkit import Chem
 
 from features import featurize_mol
+from uncertainty import applicability_domain, prediction_interval
 
 
 def predict_solubility(smiles, pipeline):
@@ -52,3 +57,23 @@ def categorize_solubility(log_sol):
         return "🟡 Medium", "Moderate solubility", "#ffaa00"
     else:
         return "🔴 Low", "Low solubility", "#ff0000"
+
+
+def predict_with_uncertainty(smiles, pipeline, train_fingerprints, interval_half_width):
+    """predict_solubility() plus a calibrated prediction interval and an
+    applicability-domain flag. Returns (result, error); on success result
+    has the same keys as predict_solubility() plus 'interval_low',
+    'interval_high', 'max_train_similarity', and 'in_domain'.
+    """
+    result, error = predict_solubility(smiles, pipeline)
+    if error:
+        return None, error
+
+    low, high = prediction_interval(result["log_solubility"], interval_half_width)
+    max_similarity, in_domain = applicability_domain(result["mol"], train_fingerprints)
+
+    result["interval_low"] = low
+    result["interval_high"] = high
+    result["max_train_similarity"] = max_similarity
+    result["in_domain"] = in_domain
+    return result, None

@@ -85,3 +85,30 @@ Documented as a negative result, not discarded silently — an honest
 "we tried X, it didn't help, here's why" is itself a legitimate portfolio
 signal for a recruiter, and beats the current line's implicit claim that
 2048 raw bits with no descriptors is the last word.
+
+---
+
+## Addendum: Step 4 - prediction uncertainty + applicability domain
+
+Two independent, inference-time additions on top of the step 3 pipeline (no
+retraining, no change to the fitted scaler/selector/model):
+
+1. **Prediction interval** via split conformal prediction: the already
+   held-out test set's residuals (computed once in step 3, reused here only
+   to calibrate an interval width - not for any further model selection)
+   give an empirical 90% absolute-residual quantile. Every new prediction
+   gets `[pred - q90, pred + q90]`. This is a real but honest limitation -
+   with a proper 3-way split the calibration set would be separate from the
+   test set used for the headline R²/RMSE; here they're the same 229 rows
+   because the dataset is small. Documented as such rather than overstated
+   as a rigorous conformal guarantee.
+2. **Applicability domain check**: Tanimoto similarity between the query
+   molecule's Morgan fingerprint and its nearest neighbor in the 915-row
+   training set. Below a similarity threshold (0.4, a common medicinal-
+   chemistry convention for "structurally similar"), the prediction is
+   flagged as extrapolation - consistent with the AqSolDB external-validation
+   finding that accuracy drops outside the training distribution.
+
+No new data enters training; only `data.txt`'s existing train split is
+reused to build a fingerprint lookup table. No leakage risk beyond what
+step 3 already accepted.

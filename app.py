@@ -6,7 +6,8 @@ from rdkit.Chem import Draw, Descriptors, Crippen, Lipinski
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from solubility import predict_solubility, categorize_solubility
+from solubility import predict_solubility, categorize_solubility, predict_with_uncertainty
+from uncertainty import load_training_fingerprints
 
 # Page configuration
 st.set_page_config(
@@ -30,6 +31,22 @@ def load_model():
     except Exception as e:
         st.error(f"⚠️ Error loading model: {str(e)}")
         return None
+
+# Load the applicability-domain reference set and the calibrated prediction
+# interval half-width (see uncertainty.py and SPEC.md's step-4 addendum)
+@st.cache_resource
+def load_uncertainty_artifacts():
+    import json
+    import os
+    try:
+        train_fingerprints = load_training_fingerprints()
+        with open('uncertainty_calibration.json') as f:
+            calibration = json.load(f)
+        return train_fingerprints, calibration['q90_half_width']
+    except Exception as e:
+        st.warning(f"⚠️ Uncertainty artifacts unavailable ({str(e)}) - predictions "
+                   "will show without a confidence interval or applicability check.")
+        return None, None
 
 # Wizualizacja struktury molekularnej
 def display_molecule_structure(smiles):
@@ -64,6 +81,7 @@ st.markdown("---")
 
 # Load model
 pipeline = load_model()
+train_fingerprints, interval_half_width = load_uncertainty_artifacts()
 
 if pipeline is None:
     st.stop()
@@ -88,7 +106,12 @@ with tab1:
         predict_button = st.button("🔍 Predict Solubility", use_container_width=True)
     
     if predict_button and smiles_input:
-        result, error = predict_solubility(smiles_input, pipeline)
+        if train_fingerprints is not None:
+            result, error = predict_with_uncertainty(
+                smiles_input, pipeline, train_fingerprints, interval_half_width
+            )
+        else:
+            result, error = predict_solubility(smiles_input, pipeline)
         
         if error:
             st.error(f"❌ Error: {error}")
@@ -111,6 +134,21 @@ with tab1:
                 
                 st.metric("log(solubility)", f"{log_sol:.3f}")
                 st.metric("Actual solubility", f"{actual_sol:.2e} mol/L")
+
+                if "interval_low" in result:
+                    st.caption(
+                        f"90% prediction interval: [{result['interval_low']:.2f}, "
+                        f"{result['interval_high']:.2f}] log(mol/L) "
+                        "(calibrated on the held-out test set - see SPEC.md)"
+                    )
+                    if not result["in_domain"]:
+                        st.warning(
+                            f"⚠️ Outside the model's applicability domain "
+                            f"(closest training compound: {result['max_train_similarity']:.2f} "
+                            "Tanimoto similarity, below the 0.40 threshold). Treat this "
+                            "prediction with extra caution - see the AqSolDB external "
+                            "validation in README.md for why."
+                        )
                 
                 st.markdown(f"<h3 style='color:{color}'>{category}</h3>", unsafe_allow_html=True)
                 st.info(f"**Classification**: {desc}")

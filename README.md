@@ -94,11 +94,20 @@ The gap between the in-distribution test score (0.91) and the external score (0.
 
 Categories: 🟢 High (log(sol) > -1), 🟡 Medium (-1 to -3), 🔴 Low (< -3).
 
+## 🎯 Prediction uncertainty & applicability domain
+
+Every prediction also gets:
+
+- **A 90% prediction interval**, via split conformal prediction: `±0.96 log(mol/L)`, calibrated as the 90th percentile of absolute residuals on the held-out test set. Honest caveat (see [SPEC.md](SPEC.md)): with a dataset this size, the calibration set is the same 229 rows used for the headline R²/RMSE, so this isn't a textbook-rigorous conformal guarantee - it's a reasonable, clearly-labeled approximation.
+- **An applicability-domain flag**: the Tanimoto similarity between the query molecule's fingerprint and its nearest neighbor in the 915-compound training set. Below 0.40 similarity, the app warns that the prediction is extrapolation - directly motivated by the AqSolDB result above, where accuracy visibly drops outside the training distribution.
+
+See `uncertainty.py` for the implementation and `uncertainty_calibration.json` for the calibration numbers.
+
 ## 🚀 Streamlit app
 
 An interactive app (`app.py`) built on top of the trained pipeline:
 
-- **Predict tab** — paste a SMILES string, get an instant prediction, molecule drawing, and solubility category with interpretation
+- **Predict tab** — paste a SMILES string, get an instant prediction, molecule drawing, and solubility category with interpretation, a 90% prediction interval, and an applicability-domain warning when the molecule is dissimilar to the training set
 - **Database examples** — precomputed predictions for common drugs (aspirin, ibuprofen, paracetamol, caffeine, naproxen, diclofenac) as a quick reference
 - **About the model** — performance metrics, model comparison, technical details
 - **How to use** — SMILES notation primer and where to find SMILES for a given drug (PubChem, DrugBank, ChemSpider)
@@ -145,27 +154,30 @@ python train_v2.py
 ├── app.py                          # Streamlit application
 ├── features.py                     # Shared feature construction (fingerprint + descriptors)
 ├── solubility.py                   # Core prediction/classification logic, unit tested
-├── train_v2.py                     # Training script: model comparison, selection, AqSolDB validation
+├── uncertainty.py                  # Prediction interval + applicability-domain check
+├── train_v2.py                     # Training script: model comparison, selection, AqSolDB validation, calibration
 ├── SPEC.md                         # Spec for the model-improvement pass (leakage guardrails, plan)
 ├── drug_solubility_pipeline.joblib # Trained pipeline (scaler + feature selector + XGBoost)
+├── train_fingerprints.pkl          # Training-set fingerprints for the applicability-domain check
+├── uncertainty_calibration.json    # Calibrated prediction-interval half-width
 ├── drug_solubility.ipynb           # Original analysis notebook (EDA, v1 baseline training)
 ├── project_summary.json            # Machine-readable results summary
 ├── data.txt                        # ESOL dataset
 ├── requirements.txt
 ├── packages.txt                    # System deps for RDKit on Streamlit Cloud
-├── tests/                          # pytest suite (features, prediction logic, leakage guardrail)
+├── tests/                          # pytest suite (features, prediction logic, leakage guardrail, uncertainty)
 └── README.md
 ```
 
 ## 🎓 Skills demonstrated
 
-Cheminformatics (SMILES, Morgan fingerprints, molecular descriptors) · machine learning (model selection, hyperparameter tuning, cross-validation, feature selection, external validation, feature importance) · Python (pandas, numpy, scikit-learn, XGBoost, RDKit, Streamlit) · engineering practice (spec-driven development, leakage-safe pipelines, automated tests + CI) · deployment (Streamlit Community Cloud).
+Cheminformatics (SMILES, Morgan fingerprints, molecular descriptors) · machine learning (model selection, hyperparameter tuning, cross-validation, feature selection, external validation, feature importance, conformal prediction intervals, applicability-domain analysis) · Python (pandas, numpy, scikit-learn, XGBoost, RDKit, Streamlit) · engineering practice (spec-driven development, leakage-safe pipelines, automated tests + CI) · deployment (Streamlit Community Cloud).
 
 ## 📊 Possible next steps
 
-- Prediction uncertainty intervals (free from XGBoost/RF tree variance) and an applicability-domain check (Tanimoto similarity to the training set) before trusting a prediction
 - FastAPI `/predict` endpoint + Dockerfile, with Streamlit as the UI on top
 - Investigate the external-validation gap further (which AqSolDB compound classes drive the R² drop from 0.91 to 0.64)
+- A proper 3-way split (train / calibration / test) if the dataset grows, so the prediction interval is calibrated independently of the reported test R²
 
 ## 📝 References
 

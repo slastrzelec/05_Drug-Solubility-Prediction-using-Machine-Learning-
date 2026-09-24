@@ -1,0 +1,8 @@
+{
+  "method": "split conformal (test-set absolute residual quantile)",
+  "calibration_set": "step-3 test set (229 compounds) - same set used for the headline R2/RMSE, see SPEC.md addendum",
+  "q80_half_width": 0.7649091396331786,
+  "q90_half_width": 0.9570277171134949,
+  "empirical_coverage_at_q90": 0.8995633187772926,
+  "n_calibration": 229
+}

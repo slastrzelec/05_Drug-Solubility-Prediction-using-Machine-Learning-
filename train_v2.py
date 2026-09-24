@@ -32,6 +32,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVR
 
 from features import featurize_mol
+from uncertainty import build_training_fingerprints
 
 RDLogger.DisableLog("rdApp.*")
 
@@ -189,8 +190,8 @@ def main():
     smiles_arr = np.array(smiles_list)[valid_mask]
     log(f"Feature matrix: {X_all.shape}")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_all, y_all, test_size=0.2, random_state=RANDOM_STATE
+    X_train, X_test, y_train, y_test, smi_train, smi_test = train_test_split(
+        X_all, y_all, smiles_arr, test_size=0.2, random_state=RANDOM_STATE
     )
     log(f"Train: {X_train.shape}, Test: {X_test.shape}")
 
@@ -248,6 +249,33 @@ def main():
         import joblib
         joblib.dump(best_estimator, "drug_solubility_pipeline.joblib")
         log("New pipeline beats baseline - saved drug_solubility_pipeline.joblib")
+
+        log("Building the applicability-domain fingerprint lookup "
+            "(training split only)...")
+        build_training_fingerprints(list(smi_train))
+        log("Saved train_fingerprints.pkl")
+
+        log("Calibrating the prediction interval (split conformal on the test set, "
+            "see SPEC.md step-4 addendum)...")
+        residuals = y_test - y_pred
+        abs_residuals = np.abs(residuals)
+        q90 = float(np.quantile(abs_residuals, 0.90))
+        q80 = float(np.quantile(abs_residuals, 0.80))
+        lower, upper = y_pred - q90, y_pred + q90
+        coverage = float(np.mean((y_test >= lower) & (y_test <= upper)))
+        calibration = {
+            "method": "split conformal (test-set absolute residual quantile)",
+            "calibration_set": "step-3 test set (229 compounds) - same set used for "
+                                "the headline R2/RMSE, see SPEC.md step-4 addendum",
+            "q80_half_width": q80,
+            "q90_half_width": q90,
+            "empirical_coverage_at_q90": coverage,
+            "n_calibration": int(len(y_test)),
+        }
+        with open("uncertainty_calibration.json", "w", encoding="utf-8") as f:
+            json.dump(calibration, f, indent=2)
+        log(f"Saved uncertainty_calibration.json (q90={q90:.4f}, "
+            f"empirical coverage={coverage:.3f})")
     else:
         log("New pipeline does NOT beat baseline - keeping the existing model "
             "and documenting this as a negative result")
